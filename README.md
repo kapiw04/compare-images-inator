@@ -24,12 +24,51 @@ A powerful image comparison application built with SFML and ImGui that allows yo
 ## Building the Project
 
 ### Prerequisites
-- C++20 compatible compiler
-- Meson build system
-- Ninja
-- SFML 3.0
-- ImGui
-- ImGui-SFML
+
+**Build Tools:**
+- C++20 compatible compiler (gcc, clang, or MSVC)
+- **uv** (required by build and setup scripts) - [Installation Guide](https://docs.astral.sh/uv/)
+- Meson build system (≥ 1.3.0)
+- Ninja build backend
+- CMake (used by some subproject dependencies)
+- pkg-config
+
+**System Libraries (required by SFML):**
+- X11 development libraries (Linux)
+- OpenGL development libraries
+- Audio libraries (ALSA/PulseAudio on Linux)
+- Freetype development libraries
+
+**Managed Dependencies (automatically downloaded by Meson):**
+- SFML 3.0.1
+- ImGui 1.91.6
+- ImGui-SFML 3.0
+- miniaudio 0.11.22
+
+**Optional Tools:**
+- **ImageMagick** (for converting images to BMP format)
+
+#### Installing System Dependencies
+
+On Ubuntu/Debian:
+```bash
+sudo apt install build-essential meson ninja-build cmake pkg-config \
+  libx11-dev libxrandr-dev libxcursor-dev libxi-dev libudev-dev \
+  libgl1-mesa-dev libopenal-dev libvorbis-dev libflac-dev \
+  libfreetype-dev
+```
+
+On Arch Linux:
+```bash
+sudo pacman -S base-devel meson ninja cmake pkgconf \
+  libx11 libxrandr libxcursor libxi systemd mesa openal \
+  libvorbis flac freetype2
+```
+
+On macOS:
+```bash
+brew install meson ninja cmake pkg-config
+```
 
 ### Build Instructions
 
@@ -97,15 +136,26 @@ build/compare-images-inator
 
 ## Converting Images to BMP
 
-If you have images in other formats (JPEG, PNG, etc.), convert them to BMP first:
+If you have images in other formats (JPEG, PNG, etc.), convert them to BMP first using **ImageMagick**:
+
+### Install ImageMagick
+
+On Ubuntu/Debian:
+```bash
+sudo apt install imagemagick
+```
+
+On macOS:
+```bash
+brew install imagemagick
+```
+
+### Convert Images
 
 ```bash
 convert input.jpg output.bmp
-```
-
-Or using SFML:
-```bash
 convert example.jfif example.bmp
+convert image.png image.bmp
 ```
 
 ## Project Structure
