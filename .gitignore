@@ -61,3 +61,6 @@ Makefile
 *.tmp
 *.bak
 *.cache
+
+# Generated difference images (anywhere in the project)
+**/difference.bmp

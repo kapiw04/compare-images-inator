@@ -1,0 +1,35 @@
+Interfejsy u»ytkownika i biblioteki graczne
+
+Projekt nr 17
+
+Porównywanie obrazów
+
+Opis projektu
+Jedn¡ z podstawowych czynno±ci przy wykonywaniu ró»nego rodzaju testów fotogracznych jest porównywanie zdj¦¢. Najªatwiej zrobi¢ to wy±wietlaj¡c zdj¦cia obok siebie w
+jednakowej skali. Celem projektu jest stworzenie oprogramowania uªatwiaj¡cego porównywanie zdj¦¢.
+
+Wymagania podstawowe
+W wersji podstawowej program powinien wczyta¢ dwa wybrane zdj¦cia w postaci plików
+BMP i wy±wietli¢ je w podzielonym pionow¡ kresk¡ gªównym oknie aplikacji. Program
+musi umo»liwia¢ synchroniczn¡ zmian¦ stopnia powi¦kszenia zdj¦¢ oraz synchroniczne przesuwanie obszaru widocznego w sytuacji, gdy caªe zdj¦cie nie mie±ci si¦ w obszarze roboczym
+programu. Zmian¦ powi¦kszenia w wersji podstawowej realizuje si¦ poprzez zmian¦ rozmiarów piksela. Dost¦pne wi¦c s¡ jedynie powi¦kszenia 50%, 100%, 200%, 400% itd. Program
+powinien równie» pozwala¢ na wykonanie zdj¦cia ró»nicowego polegaj¡cego na odj¦ciu w
+ka»dym punkcie warto±ci ka»dej skªadowej koloru (RGB) jednego zdj¦cia od drugiego i zapisanie warto±ci bezwzgl¦dnej otrzymanej ró»nicy na zdj¦ciu ró»nicowym. Powinna istnie¢
+mo»liwo±¢ zapisania takiego obrazu w pliku BMP.
+
+Wymagania rozszerzone
+W wersji poszerzonej program powinien:
+ pozwala¢ na wykonywanie dowolnych powi¦ksze«,
+ obsªugiwa¢ zdj¦cia o ró»nych rozmiarach (w takiej sytuacji najpierw powinno si¦ usta-
+
+la¢ wzgl¦dne powi¦kszenie jednego zdj¦cia wzgl¦dem drugiego, a pó¹niej obsªugiwa¢
+je synchronicznie),
+
+ pozwala¢ zaznaczy¢ wybrany obszar na zdj¦ciu, wyci¡¢ ten obszar z obu zdj¦¢ i po
+
+sklejeniu obok siebie wybranych fragmentów w postaci jednego zdj¦cia zapisa¢ je w
+pliku BMP,
+
+ obsªugiwa¢ inne formaty plików.
+
+
