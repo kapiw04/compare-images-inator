@@ -54,7 +54,7 @@ A powerful image comparison application built with SFML and ImGui that allows yo
 - miniaudio 0.11.22
 
 **Optional Tools:**
-- **ImageMagick** (for converting images to BMP format)
+- **ImageMagick** (optional, for advanced image format conversions if needed)
 
 #### Installing System Dependencies
 
@@ -222,9 +222,9 @@ compare-images-inator/
 - Ensure the file exists and has read permissions
 
 ### "Failed to load image" Error
-- Confirm the file is a valid BMP format
+- Ensure the file is in a supported format (BMP, PNG, JPG, GIF, TGA)
 - Check that the file is not corrupted
-- Try converting the image using ImageMagick or similar tools
+- Verify the file has valid image data
 
 ### "Setting vertical sync not supported" Warning
 - This is a benign warning on some systems

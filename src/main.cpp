@@ -125,7 +125,7 @@ void generateDifferenceImage(AppState& state) {
     state.statusMessage = "Difference image generated! See popup window.";
 }
 
-// Save difference image to BMP file
+// Save difference image to file (supports multiple formats based on extension)
 bool saveDifferenceImage(AppState& state) {
     if (!state.diffImageGenerated) {
         state.statusMessage = "Generate difference image first!";
@@ -135,11 +135,6 @@ bool saveDifferenceImage(AppState& state) {
     std::string path = state.savePathDiff;
     if (path.empty()) {
         path = "difference.bmp";
-    }
-    
-    // Ensure .bmp extension
-    if (path.length() < 4 || path.substr(path.length() - 4) != ".bmp") {
-        path += ".bmp";
     }
     
     if (!state.diffImage.saveToFile(path)) {
@@ -170,7 +165,8 @@ void calculateRelativeZoom(AppState& state) {
     float ratioX = static_cast<float>(size1.x) / static_cast<float>(size2.x);
     float ratioY = static_cast<float>(size1.y) / static_cast<float>(size2.y);
     
-    // Use the average ratio to maintain proportions
+    // Use the average ratio as a compromise between width and height scaling
+    // Note: This may cause some distortion if aspect ratios differ significantly
     state.relativeZoom2 = (ratioX + ratioY) / 2.0f;
 }
 
@@ -227,12 +223,17 @@ void extractAndCombineSelection(AppState& state) {
     unsigned int selHeight2 = y2_img2 - y1_img2;
     
     if (selWidth2 == 0 || selHeight2 == 0) {
-        selWidth2 = selWidth;
-        selHeight2 = selHeight;
-        x2_img2 = std::min(x1_img2 + selWidth2, size2.x);
-        y2_img2 = std::min(y1_img2 + selHeight2, size2.y);
-        selWidth2 = x2_img2 - x1_img2;
-        selHeight2 = y2_img2 - y1_img2;
+        // Fallback: use Image 1's dimensions if mapping produces empty region
+        // This can happen with extreme aspect ratio differences
+        selWidth2 = std::min(selWidth, size2.x - x1_img2);
+        selHeight2 = std::min(selHeight, size2.y - y1_img2);
+        x2_img2 = x1_img2 + selWidth2;
+        y2_img2 = y1_img2 + selHeight2;
+        
+        if (selWidth2 == 0 || selHeight2 == 0) {
+            state.statusMessage = "Cannot map selection to Image 2!";
+            return;
+        }
     }
     
     // Create combined image (both selections side by side)
@@ -345,7 +346,6 @@ int main() {
             // Handle mouse wheel for zooming - arbitrary zoom levels
             if (auto* scrollEvent = event->getIf<sf::Event::MouseWheelScrolled>()) {
                 if (!ImGui::GetIO().WantCaptureMouse) {
-                    float oldZoom = state.zoomLevel;
                     if (scrollEvent->delta > 0) {
                         state.zoomLevel = std::min(state.zoomMax, state.zoomLevel + state.zoomStep);
                     } else if (scrollEvent->delta < 0) {
@@ -460,7 +460,7 @@ int main() {
         
         // Area selection controls
         ImGui::Text("Area Selection:");
-        ImGui::Text("(Left-click and drag on images to select)");
+        ImGui::Text("(Left-click and drag on Image 1 to select)");
         if (state.hasSelection) {
             sf::Vector2f minCoord, maxCoord;
             getNormalizedSelection(state, minCoord, maxCoord);
