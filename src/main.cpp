@@ -14,31 +14,48 @@ struct AppState {
     sf::Image image1;
     sf::Image image2;
     sf::Image diffImage;
+    sf::Image selectionImage;  // Combined selection from both images
     
     sf::Texture texture1;
     sf::Texture texture2;
     sf::Texture diffTexture;
+    sf::Texture selectionTexture;
     
     bool image1Loaded = false;
     bool image2Loaded = false;
     bool diffImageGenerated = false;
+    bool selectionImageGenerated = false;
     
     // File paths
     char filePath1[512] = "";
     char filePath2[512] = "";
     char savePathDiff[512] = "difference.bmp";
+    char savePathSelection[512] = "selection.bmp";
     
-    // View settings
-    int zoomLevel = 2; // Index: 0=50%, 1=100%, 2=200%, 3=400%
-    float zoomFactors[4] = {0.5f, 1.0f, 2.0f, 4.0f};
+    // View settings - arbitrary zoom
+    float zoomLevel = 1.0f;  // Continuous zoom level (default 100%)
+    float zoomMin = 0.1f;    // 10% minimum
+    float zoomMax = 10.0f;   // 1000% maximum
+    float zoomStep = 0.1f;   // Zoom step for mouse wheel
+    
+    // Relative zoom adjustment for different-sized images
+    float relativeZoom2 = 1.0f;  // Relative zoom for image 2 vs image 1
+    bool autoMatchSizes = true;  // Automatically match image sizes
     
     // Pan offset (synchronized for both images)
     sf::Vector2f panOffset = {0.0f, 0.0f};
     bool isPanning = false;
     sf::Vector2i lastMousePos;
     
+    // Area selection
+    bool isSelecting = false;
+    bool hasSelection = false;
+    sf::Vector2f selectionStart = {0.0f, 0.0f};  // In image coordinates
+    sf::Vector2f selectionEnd = {0.0f, 0.0f};    // In image coordinates
+    int activePane = 0;  // 0 = none, 1 = left, 2 = right
+    
     // Status message
-    std::string statusMessage = "Load two BMP images to compare";
+    std::string statusMessage = "Load two images to compare";
 };
 
 // Load an image from file
@@ -108,7 +125,7 @@ void generateDifferenceImage(AppState& state) {
     state.statusMessage = "Difference image generated! See popup window.";
 }
 
-// Save difference image to BMP file
+// Save difference image to file (supports multiple formats based on extension)
 bool saveDifferenceImage(AppState& state) {
     if (!state.diffImageGenerated) {
         state.statusMessage = "Generate difference image first!";
@@ -120,17 +137,165 @@ bool saveDifferenceImage(AppState& state) {
         path = "difference.bmp";
     }
     
-    // Ensure .bmp extension
-    if (path.length() < 4 || path.substr(path.length() - 4) != ".bmp") {
-        path += ".bmp";
-    }
-    
     if (!state.diffImage.saveToFile(path)) {
         state.statusMessage = "Failed to save difference image!";
         return false;
     }
     
     state.statusMessage = "Saved difference image to: " + path;
+    return true;
+}
+
+// Calculate relative zoom for image 2 to match image 1's apparent size
+void calculateRelativeZoom(AppState& state) {
+    if (!state.image1Loaded || !state.image2Loaded) {
+        state.relativeZoom2 = 1.0f;
+        return;
+    }
+    
+    sf::Vector2u size1 = state.image1.getSize();
+    sf::Vector2u size2 = state.image2.getSize();
+    
+    if (size2.x == 0 || size2.y == 0) {
+        state.relativeZoom2 = 1.0f;
+        return;
+    }
+    
+    // Calculate the ratio to make image2 appear the same size as image1
+    float ratioX = static_cast<float>(size1.x) / static_cast<float>(size2.x);
+    float ratioY = static_cast<float>(size1.y) / static_cast<float>(size2.y);
+    
+    // Use the average ratio as a compromise between width and height scaling
+    // Note: This may cause some distortion if aspect ratios differ significantly
+    state.relativeZoom2 = (ratioX + ratioY) / 2.0f;
+}
+
+// Get normalized selection rectangle (min/max coordinates)
+void getNormalizedSelection(const AppState& state, sf::Vector2f& minCoord, sf::Vector2f& maxCoord) {
+    minCoord.x = std::min(state.selectionStart.x, state.selectionEnd.x);
+    minCoord.y = std::min(state.selectionStart.y, state.selectionEnd.y);
+    maxCoord.x = std::max(state.selectionStart.x, state.selectionEnd.x);
+    maxCoord.y = std::max(state.selectionStart.y, state.selectionEnd.y);
+}
+
+// Extract selected area from both images and combine side-by-side
+void extractAndCombineSelection(AppState& state) {
+    if (!state.image1Loaded || !state.image2Loaded) {
+        state.statusMessage = "Load both images first!";
+        return;
+    }
+    
+    if (!state.hasSelection) {
+        state.statusMessage = "No area selected! Left-click and drag to select an area.";
+        return;
+    }
+    
+    sf::Vector2f minCoord, maxCoord;
+    getNormalizedSelection(state, minCoord, maxCoord);
+    
+    sf::Vector2u size1 = state.image1.getSize();
+    sf::Vector2u size2 = state.image2.getSize();
+    
+    // Clamp selection to image 1 bounds
+    unsigned int x1 = static_cast<unsigned int>(std::max(0.0f, minCoord.x));
+    unsigned int y1 = static_cast<unsigned int>(std::max(0.0f, minCoord.y));
+    unsigned int x2 = static_cast<unsigned int>(std::min(static_cast<float>(size1.x), maxCoord.x));
+    unsigned int y2 = static_cast<unsigned int>(std::min(static_cast<float>(size1.y), maxCoord.y));
+    
+    unsigned int selWidth = x2 - x1;
+    unsigned int selHeight = y2 - y1;
+    
+    if (selWidth == 0 || selHeight == 0) {
+        state.statusMessage = "Selection is empty!";
+        return;
+    }
+    
+    // For image 2, we need to calculate the corresponding region
+    // taking into account the relative zoom factor
+    float relZoom = state.autoMatchSizes ? state.relativeZoom2 : 1.0f;
+    
+    unsigned int x1_img2 = static_cast<unsigned int>(std::max(0.0f, minCoord.x / relZoom));
+    unsigned int y1_img2 = static_cast<unsigned int>(std::max(0.0f, minCoord.y / relZoom));
+    unsigned int x2_img2 = static_cast<unsigned int>(std::min(static_cast<float>(size2.x), maxCoord.x / relZoom));
+    unsigned int y2_img2 = static_cast<unsigned int>(std::min(static_cast<float>(size2.y), maxCoord.y / relZoom));
+    
+    unsigned int selWidth2 = x2_img2 - x1_img2;
+    unsigned int selHeight2 = y2_img2 - y1_img2;
+    
+    if (selWidth2 == 0 || selHeight2 == 0) {
+        // Fallback: use Image 1's dimensions if mapping produces empty region
+        // This can happen with extreme aspect ratio differences
+        selWidth2 = std::min(selWidth, size2.x - x1_img2);
+        selHeight2 = std::min(selHeight, size2.y - y1_img2);
+        x2_img2 = x1_img2 + selWidth2;
+        y2_img2 = y1_img2 + selHeight2;
+        
+        if (selWidth2 == 0 || selHeight2 == 0) {
+            state.statusMessage = "Cannot map selection to Image 2!";
+            return;
+        }
+    }
+    
+    // Create combined image (both selections side by side)
+    unsigned int combinedWidth = selWidth + selWidth2;
+    unsigned int combinedHeight = std::max(selHeight, selHeight2);
+    
+    state.selectionImage.resize({combinedWidth, combinedHeight});
+    
+    // Fill with black background
+    for (unsigned int y = 0; y < combinedHeight; ++y) {
+        for (unsigned int x = 0; x < combinedWidth; ++x) {
+            state.selectionImage.setPixel({x, y}, sf::Color::Black);
+        }
+    }
+    
+    // Copy selection from image 1 (left side)
+    for (unsigned int y = 0; y < selHeight; ++y) {
+        for (unsigned int x = 0; x < selWidth; ++x) {
+            if (x1 + x < size1.x && y1 + y < size1.y) {
+                sf::Color pixel = state.image1.getPixel({x1 + x, y1 + y});
+                state.selectionImage.setPixel({x, y}, pixel);
+            }
+        }
+    }
+    
+    // Copy selection from image 2 (right side)
+    for (unsigned int y = 0; y < selHeight2; ++y) {
+        for (unsigned int x = 0; x < selWidth2; ++x) {
+            if (x1_img2 + x < size2.x && y1_img2 + y < size2.y) {
+                sf::Color pixel = state.image2.getPixel({x1_img2 + x, y1_img2 + y});
+                state.selectionImage.setPixel({selWidth + x, y}, pixel);
+            }
+        }
+    }
+    
+    if (!state.selectionTexture.loadFromImage(state.selectionImage)) {
+        state.statusMessage = "Failed to create selection texture!";
+        return;
+    }
+    
+    state.selectionImageGenerated = true;
+    state.statusMessage = "Selection extracted! See popup window.";
+}
+
+// Save selection image to file (supports multiple formats based on extension)
+bool saveSelectionImage(AppState& state) {
+    if (!state.selectionImageGenerated) {
+        state.statusMessage = "Extract selection first!";
+        return false;
+    }
+    
+    std::string path = state.savePathSelection;
+    if (path.empty()) {
+        path = "selection.bmp";
+    }
+    
+    if (!state.selectionImage.saveToFile(path)) {
+        state.statusMessage = "Failed to save selection image!";
+        return false;
+    }
+    
+    state.statusMessage = "Saved selection image to: " + path;
     return true;
 }
 
@@ -178,13 +343,13 @@ int main() {
                 window.close();
             }
             
-            // Handle mouse wheel for zooming
+            // Handle mouse wheel for zooming - arbitrary zoom levels
             if (auto* scrollEvent = event->getIf<sf::Event::MouseWheelScrolled>()) {
                 if (!ImGui::GetIO().WantCaptureMouse) {
-                    if (scrollEvent->delta > 0 && state.zoomLevel < 3) {
-                        state.zoomLevel++;
-                    } else if (scrollEvent->delta < 0 && state.zoomLevel > 0) {
-                        state.zoomLevel--;
+                    if (scrollEvent->delta > 0) {
+                        state.zoomLevel = std::min(state.zoomMax, state.zoomLevel + state.zoomStep);
+                    } else if (scrollEvent->delta < 0) {
+                        state.zoomLevel = std::max(state.zoomMin, state.zoomLevel - state.zoomStep);
                     }
                 }
             }
@@ -225,10 +390,12 @@ int main() {
         ImGui::Text("Image 1 (Left):");
         ImGui::PushID("img1");
         ImGui::InputText("Path", state.filePath1, sizeof(state.filePath1));
-        if (ImGui::Button("Load BMP")) {
+        if (ImGui::Button("Load Image")) {
             if (loadImage(state.filePath1, state.image1, state.texture1, state.statusMessage)) {
                 state.image1Loaded = true;
                 state.diffImageGenerated = false;
+                state.selectionImageGenerated = false;
+                calculateRelativeZoom(state);
             }
         }
         ImGui::PopID();
@@ -244,10 +411,12 @@ int main() {
         ImGui::Text("Image 2 (Right):");
         ImGui::PushID("img2");
         ImGui::InputText("Path", state.filePath2, sizeof(state.filePath2));
-        if (ImGui::Button("Load BMP")) {
+        if (ImGui::Button("Load Image")) {
             if (loadImage(state.filePath2, state.image2, state.texture2, state.statusMessage)) {
                 state.image2Loaded = true;
                 state.diffImageGenerated = false;
+                state.selectionImageGenerated = false;
+                calculateRelativeZoom(state);
             }
         }
         ImGui::PopID();
@@ -259,16 +428,63 @@ int main() {
         
         ImGui::Separator();
         
-        // Zoom controls
+        // Zoom controls - continuous arbitrary zoom
         ImGui::Text("Zoom Level:");
-        const char* zoomLabels[] = {"50%", "100%", "200%", "400%"};
-        for (int i = 0; i < 4; ++i) {
-            if (i > 0) ImGui::SameLine();
-            if (ImGui::RadioButton(zoomLabels[i], state.zoomLevel == i)) {
-                state.zoomLevel = i;
+        ImGui::SliderFloat("##zoom", &state.zoomLevel, state.zoomMin, state.zoomMax, "%.1fx");
+        ImGui::SameLine();
+        ImGui::Text("(%.0f%%)", state.zoomLevel * 100.0f);
+        
+        // Quick zoom buttons
+        if (ImGui::Button("25%")) state.zoomLevel = 0.25f;
+        ImGui::SameLine();
+        if (ImGui::Button("50%")) state.zoomLevel = 0.5f;
+        ImGui::SameLine();
+        if (ImGui::Button("100%")) state.zoomLevel = 1.0f;
+        ImGui::SameLine();
+        if (ImGui::Button("200%")) state.zoomLevel = 2.0f;
+        ImGui::SameLine();
+        if (ImGui::Button("400%")) state.zoomLevel = 4.0f;
+        
+        ImGui::Text("(Use mouse wheel to zoom, right-click drag to pan)");
+        
+        ImGui::Separator();
+        
+        // Different size image handling
+        ImGui::Text("Size Matching:");
+        ImGui::Checkbox("Auto-match different image sizes", &state.autoMatchSizes);
+        if (state.autoMatchSizes && state.image1Loaded && state.image2Loaded) {
+            ImGui::Text("Relative zoom for Image 2: %.2fx", state.relativeZoom2);
+        }
+        
+        ImGui::Separator();
+        
+        // Area selection controls
+        ImGui::Text("Area Selection:");
+        ImGui::Text("(Left-click and drag on Image 1 to select)");
+        if (state.hasSelection) {
+            sf::Vector2f minCoord, maxCoord;
+            getNormalizedSelection(state, minCoord, maxCoord);
+            ImGui::Text("Selection: (%.0f,%.0f) to (%.0f,%.0f)", 
+                        minCoord.x, minCoord.y, maxCoord.x, maxCoord.y);
+            
+            if (ImGui::Button("Extract Selection")) {
+                extractAndCombineSelection(state);
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Clear Selection")) {
+                state.hasSelection = false;
+                state.selectionImageGenerated = false;
+            }
+        } else {
+            ImGui::TextDisabled("No selection");
+        }
+        
+        if (state.selectionImageGenerated) {
+            ImGui::InputText("Selection Save Path", state.savePathSelection, sizeof(state.savePathSelection));
+            if (ImGui::Button("Save Selection")) {
+                saveSelectionImage(state);
             }
         }
-        ImGui::Text("(Use mouse wheel to zoom, right-click drag to pan)");
         
         ImGui::Separator();
         
@@ -278,8 +494,8 @@ int main() {
             generateDifferenceImage(state);
         }
         
-        ImGui::InputText("Save Path", state.savePathDiff, sizeof(state.savePathDiff));
-        if (ImGui::Button("Save Difference as BMP")) {
+        ImGui::InputText("Diff Save Path", state.savePathDiff, sizeof(state.savePathDiff));
+        if (ImGui::Button("Save Difference")) {
             saveDifferenceImage(state);
         }
         
@@ -298,11 +514,16 @@ int main() {
 
         // Get window size for image views
         sf::Vector2u windowSize = window.getSize();
-        float panelWidth = 350.0f;
+        float panelWidth = 400.0f;  // Increased for new controls
         float availableWidth = windowSize.x - panelWidth - 30.0f;
         float viewWidth = availableWidth / 2.0f - 10.0f;
         float viewHeight = windowSize.y - 20.0f;
-        float currentZoom = state.zoomFactors[state.zoomLevel];
+        float currentZoom = state.zoomLevel;
+        float zoom2 = state.autoMatchSizes ? currentZoom * state.relativeZoom2 : currentZoom;
+        
+        // Store pane positions for selection handling
+        ImVec2 leftPanePos, rightPanePos;
+        ImVec2 leftPaneSize, rightPaneSize;
         
         // Image comparison view
         ImGui::SetNextWindowPos(ImVec2(panelWidth + 10, 10));
@@ -313,14 +534,62 @@ int main() {
         // Split view with vertical divider
         ImGui::BeginChild("LeftPane", ImVec2(viewWidth, viewHeight - 40), true,
                           ImGuiWindowFlags_HorizontalScrollbar);
+        leftPanePos = ImGui::GetWindowPos();
+        leftPaneSize = ImGui::GetWindowSize();
+        
         if (state.image1Loaded) {
             sf::Vector2u texSize = state.texture1.getSize();
             float scaledWidth = texSize.x * currentZoom;
             float scaledHeight = texSize.y * currentZoom;
             
-            ImGui::SetCursorPos(ImVec2(state.panOffset.x + 5, state.panOffset.y + 5));
+            ImVec2 imagePos = ImVec2(state.panOffset.x + 5, state.panOffset.y + 5);
+            ImGui::SetCursorPos(imagePos);
             ImTextureID texId = static_cast<ImTextureID>(static_cast<uintptr_t>(state.texture1.getNativeHandle()));
             ImGui::Image(texId, ImVec2(scaledWidth, scaledHeight));
+            
+            // Handle selection on left pane
+            if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+                ImVec2 mousePos = ImGui::GetMousePos();
+                ImVec2 windowPos = ImGui::GetWindowPos();
+                float imgX = (mousePos.x - windowPos.x - imagePos.x) / currentZoom;
+                float imgY = (mousePos.y - windowPos.y - imagePos.y) / currentZoom;
+                state.selectionStart = {imgX, imgY};
+                state.selectionEnd = {imgX, imgY};
+                state.isSelecting = true;
+                state.activePane = 1;
+            }
+            
+            if (state.isSelecting && state.activePane == 1 && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+                ImVec2 mousePos = ImGui::GetMousePos();
+                ImVec2 windowPos = ImGui::GetWindowPos();
+                float imgX = (mousePos.x - windowPos.x - imagePos.x) / currentZoom;
+                float imgY = (mousePos.y - windowPos.y - imagePos.y) / currentZoom;
+                state.selectionEnd = {imgX, imgY};
+            }
+            
+            if (state.isSelecting && ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+                state.isSelecting = false;
+                state.hasSelection = true;
+                state.activePane = 0;
+            }
+            
+            // Draw selection rectangle overlay
+            if (state.hasSelection || state.isSelecting) {
+                ImDrawList* drawList = ImGui::GetWindowDrawList();
+                sf::Vector2f minCoord, maxCoord;
+                getNormalizedSelection(state, minCoord, maxCoord);
+                
+                ImVec2 windowPos = ImGui::GetWindowPos();
+                float rectX1 = windowPos.x + imagePos.x + minCoord.x * currentZoom;
+                float rectY1 = windowPos.y + imagePos.y + minCoord.y * currentZoom;
+                float rectX2 = windowPos.x + imagePos.x + maxCoord.x * currentZoom;
+                float rectY2 = windowPos.y + imagePos.y + maxCoord.y * currentZoom;
+                
+                drawList->AddRect(ImVec2(rectX1, rectY1), ImVec2(rectX2, rectY2), 
+                                  IM_COL32(255, 0, 0, 255), 0.0f, 0, 2.0f);
+                drawList->AddRectFilled(ImVec2(rectX1, rectY1), ImVec2(rectX2, rectY2), 
+                                        IM_COL32(255, 0, 0, 50));
+            }
         } else {
             ImGui::Text("Image 1");
             ImGui::Text("No image loaded");
@@ -332,14 +601,39 @@ int main() {
         // Vertical divider line (represented by same-line layout)
         ImGui::BeginChild("RightPane", ImVec2(viewWidth, viewHeight - 40), true,
                           ImGuiWindowFlags_HorizontalScrollbar);
+        rightPanePos = ImGui::GetWindowPos();
+        rightPaneSize = ImGui::GetWindowSize();
+        
         if (state.image2Loaded) {
             sf::Vector2u texSize = state.texture2.getSize();
-            float scaledWidth = texSize.x * currentZoom;
-            float scaledHeight = texSize.y * currentZoom;
+            float scaledWidth = texSize.x * zoom2;
+            float scaledHeight = texSize.y * zoom2;
             
-            ImGui::SetCursorPos(ImVec2(state.panOffset.x + 5, state.panOffset.y + 5));
+            ImVec2 imagePos = ImVec2(state.panOffset.x + 5, state.panOffset.y + 5);
+            ImGui::SetCursorPos(imagePos);
             ImTextureID texId = static_cast<ImTextureID>(static_cast<uintptr_t>(state.texture2.getNativeHandle()));
             ImGui::Image(texId, ImVec2(scaledWidth, scaledHeight));
+            
+            // Draw corresponding selection rectangle on image 2
+            if (state.hasSelection || state.isSelecting) {
+                ImDrawList* drawList = ImGui::GetWindowDrawList();
+                sf::Vector2f minCoord, maxCoord;
+                getNormalizedSelection(state, minCoord, maxCoord);
+                
+                // Adjust coordinates for relative zoom
+                float relZoom = state.autoMatchSizes ? state.relativeZoom2 : 1.0f;
+                
+                ImVec2 windowPos = ImGui::GetWindowPos();
+                float rectX1 = windowPos.x + imagePos.x + (minCoord.x / relZoom) * zoom2;
+                float rectY1 = windowPos.y + imagePos.y + (minCoord.y / relZoom) * zoom2;
+                float rectX2 = windowPos.x + imagePos.x + (maxCoord.x / relZoom) * zoom2;
+                float rectY2 = windowPos.y + imagePos.y + (maxCoord.y / relZoom) * zoom2;
+                
+                drawList->AddRect(ImVec2(rectX1, rectY1), ImVec2(rectX2, rectY2), 
+                                  IM_COL32(0, 255, 0, 255), 0.0f, 0, 2.0f);
+                drawList->AddRectFilled(ImVec2(rectX1, rectY1), ImVec2(rectX2, rectY2), 
+                                        IM_COL32(0, 255, 0, 50));
+            }
         } else {
             ImGui::Text("Image 2");
             ImGui::Text("No image loaded");
@@ -364,6 +658,30 @@ int main() {
             ImGui::BeginChild("DiffView", ImVec2(0, 0), true, ImGuiWindowFlags_HorizontalScrollbar);
             ImGui::SetCursorPos(ImVec2(state.panOffset.x + 5, state.panOffset.y + 5));
             ImTextureID texId = static_cast<ImTextureID>(static_cast<uintptr_t>(state.diffTexture.getNativeHandle()));
+            ImGui::Image(texId, ImVec2(scaledWidth, scaledHeight));
+            ImGui::EndChild();
+            
+            ImGui::End();
+        }
+        
+        // Selection image window (shown when extracted)
+        if (state.selectionImageGenerated) {
+            ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+            ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+            ImGui::SetNextWindowSize(ImVec2(900, 500), ImGuiCond_Appearing);
+            ImGui::SetNextWindowFocus();
+            ImGui::Begin("Selection Comparison", &state.selectionImageGenerated);
+            
+            sf::Vector2u texSize = state.selectionTexture.getSize();
+            float scaledWidth = texSize.x * currentZoom;
+            float scaledHeight = texSize.y * currentZoom;
+            
+            ImGui::Text("Left: Image 1 selection | Right: Image 2 selection");
+            ImGui::Separator();
+            
+            ImGui::BeginChild("SelectionView", ImVec2(0, 0), true, ImGuiWindowFlags_HorizontalScrollbar);
+            ImGui::SetCursorPos(ImVec2(5, 5));
+            ImTextureID texId = static_cast<ImTextureID>(static_cast<uintptr_t>(state.selectionTexture.getNativeHandle()));
             ImGui::Image(texId, ImVec2(scaledWidth, scaledHeight));
             ImGui::EndChild();
             

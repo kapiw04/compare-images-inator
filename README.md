@@ -1,24 +1,32 @@
 # Compare Images - Image Comparison Tool
 
-A powerful image comparison application built with SFML and ImGui that allows you to compare two images side-by-side with synchronized viewing and generate difference images.
+A powerful image comparison application built with SFML and ImGui that allows you to compare two images side-by-side with synchronized viewing, arbitrary zoom levels, area selection, and multiple file format support.
 
 ![Application Screenshot](screenshot.png)
 
 ## Features
 
 ### Basic Functionality
-- **Load and Display BMP Images**: Load two BMP images and view them side by side
+- **Load and Display Images**: Load two images (BMP, PNG, JPG, etc.) and view them side by side
 - **Split View**: Images displayed with a vertical divider for easy comparison
-- **Synchronized Zoom**: Zoom both images together with preset levels (50%, 100%, 200%, 400%)
+- **Synchronized Zoom**: Zoom both images together with arbitrary zoom levels (10% - 1000%)
 - **Synchronized Panning**: Pan both images simultaneously when zoomed in
 - **Difference Image**: Generate an absolute RGB difference image
-- **Export Results**: Save the difference image as a BMP file
+- **Export Results**: Save difference and selection images in multiple formats
+
+### Extended Functionality
+- **Arbitrary Zoom Levels**: Continuous zoom from 10% to 1000%, not just preset values
+- **Different Image Sizes**: Automatically adjusts relative zoom when comparing images of different dimensions
+- **Area Selection**: Select and extract a region from both images, combine them side-by-side
+- **Multiple File Formats**: Support for BMP, PNG, JPG, and other formats supported by SFML
 
 ### Controls
 - **Zoom**: 
-  - Click radio buttons (50%, 100%, 200%, 400%)
+  - Use the slider for precise zoom control (10% to 1000%)
+  - Click quick zoom buttons (25%, 50%, 100%, 200%, 400%)
   - Use mouse wheel to zoom in/out
 - **Pan**: Right-click (or middle-click) and drag to move both images together
+- **Select Area**: Left-click and drag on Image 1 to select a region (shown on both images)
 - **Reset**: Click "Reset Pan" button to return to default view position
 
 ## Building the Project
@@ -46,7 +54,7 @@ A powerful image comparison application built with SFML and ImGui that allows yo
 - miniaudio 0.11.22
 
 **Optional Tools:**
-- **ImageMagick** (for converting images to BMP format)
+- **ImageMagick** (optional, for advanced image format conversions if needed)
 
 #### Installing System Dependencies
 
@@ -99,26 +107,50 @@ build/compare-images-inator
 
 1. **Load First Image**:
    - Enter the file path in the "Image 1 (Left)" text field
-   - Click the "Load BMP" button
+   - Click the "Load Image" button
    - Image dimensions will be displayed
 
 2. **Load Second Image**:
    - Enter the file path in the "Image 2 (Right)" text field
-   - Click the "Load BMP" button
+   - Click the "Load Image" button
    - Image dimensions will be displayed
+
+**Supported Formats**: BMP, PNG, JPG/JPEG, GIF, and other formats supported by SFML
 
 ### Comparing Images
 
 1. Use the zoom controls to adjust magnification:
-   - Select 50%, 100%, 200%, or 400%
+   - Use the slider for continuous zoom (10% to 1000%)
+   - Click quick zoom buttons (25%, 50%, 100%, 200%, 400%)
    - Or use mouse wheel for quick zooming
 
 2. Pan the images:
    - Right-click and drag to move both images synchronously
    - Useful when zoomed in and images exceed viewport size
 
-3. Reset view:
+3. Handle different-sized images:
+   - Enable "Auto-match different image sizes" checkbox
+   - Image 2 will be automatically scaled to match Image 1's apparent size
+   - The relative zoom factor is displayed in the control panel
+
+4. Reset view:
    - Click "Reset Pan" to return to original position
+
+### Selecting and Extracting Areas
+
+1. **Select an Area**:
+   - Left-click and drag on Image 1 to draw a selection rectangle
+   - The selection is shown in red on Image 1 and green on Image 2
+   - The corresponding area is automatically mapped based on relative zoom
+
+2. **Extract Selection**:
+   - Click "Extract Selection" to combine both selected areas
+   - A popup window shows the selections placed side-by-side
+   - Use "Clear Selection" to remove the current selection
+
+3. **Save Selection**:
+   - Enter a filename in "Selection Save Path" (supports BMP, PNG, JPG)
+   - Click "Save Selection" to export the combined image
 
 ### Generating Difference Images
 
@@ -127,36 +159,30 @@ build/compare-images-inator
 3. A popup window will appear showing the difference image
 4. The difference is calculated as the absolute value of RGB component differences
 
-### Saving Difference Images
+### Saving Images
 
-1. Generate a difference image first
-2. Enter desired filename in "Save Path" field (default: `difference.bmp`)
-3. Click "Save Difference as BMP"
-4. The file will be saved to the specified path
+1. **Save Difference Image**:
+   - Generate a difference image first
+   - Enter desired filename in "Diff Save Path" field
+   - Click "Save Difference" button
+   - Supports BMP, PNG, JPG based on file extension
 
-## Converting Images to BMP
+2. **Save Selection Image**:
+   - Extract a selection first
+   - Enter desired filename in "Selection Save Path" field
+   - Click "Save Selection" button
 
-If you have images in other formats (JPEG, PNG, etc.), convert them to BMP first using **ImageMagick**:
+## Supported File Formats
 
-### Install ImageMagick
+The application now supports loading and saving images in multiple formats:
 
-On Ubuntu/Debian:
-```bash
-sudo apt install imagemagick
-```
-
-On macOS:
-```bash
-brew install imagemagick
-```
-
-### Convert Images
-
-```bash
-convert input.jpg output.bmp
-convert example.jfif example.bmp
-convert image.png image.bmp
-```
+| Format | Load | Save |
+|--------|------|------|
+| BMP    | ✓    | ✓    |
+| PNG    | ✓    | ✓    |
+| JPG    | ✓    | ✓    |
+| GIF    | ✓    | ✗    |
+| TGA    | ✓    | ✓    |
 
 ## Project Structure
 
@@ -196,9 +222,9 @@ compare-images-inator/
 - Ensure the file exists and has read permissions
 
 ### "Failed to load image" Error
-- Confirm the file is a valid BMP format
+- Ensure the file is in a supported format (BMP, PNG, JPG, GIF, TGA)
 - Check that the file is not corrupted
-- Try converting the image using ImageMagick or similar tools
+- Verify the file has valid image data
 
 ### "Setting vertical sync not supported" Warning
 - This is a benign warning on some systems
